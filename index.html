@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI 스마트 쓰레기 분류기</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif;color:#17211b;background:#f4f7f4}
+*{box-sizing:border-box}body{margin:0;padding:28px 16px 56px}.wrap{max-width:920px;margin:auto}
+header{margin-bottom:22px}h1{font-size:clamp(25px,4vw,36px);margin:0 0 8px}p{line-height:1.6;color:#5c6b61;margin:6px 0}
+.tag{display:inline-block;background:#e1f2e6;color:#176b38;padding:5px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.card{background:white;border:1px solid #e1e9e2;border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 4px 18px #17351a0a}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+button,.filebtn{border:0;border-radius:11px;padding:12px 16px;font-weight:700;cursor:pointer;font-size:14px}
+.primary{background:#167a3d;color:white}.secondary,.filebtn{background:#edf3ee;color:#24452e}.danger{background:#fff0ed;color:#9b3325}
+button:disabled{opacity:.45;cursor:not-allowed}input[type=file]{display:none}
+.preview{width:100%;max-height:390px;object-fit:contain;background:#f1f4f1;border-radius:12px;display:none;margin-top:12px}
+#video{width:100%;max-height:390px;background:#111;border-radius:12px;display:none;margin-top:12px}
+.status{font-size:14px;color:#526359;min-height:24px;margin-top:8px}
+.result{display:none}.big{font-size:25px;font-weight:800;margin:5px 0}.muted{font-size:13px;color:#68766d}
+.bar{height:9px;background:#edf1ed;border-radius:9px;overflow:hidden;margin:6px 0 12px}.bar span{display:block;height:100%;background:#269653;border-radius:9px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.score{padding:10px;border:1px solid #e7ece7;border-radius:10px}.scorehead{display:flex;justify-content:space-between;font-size:13px}
+.guide-box{margin-top:18px;padding:16px;background:#f2f8f4;border:1px solid #cce3d3;border-radius:14px}
+.guide-box h3{margin:0 0 10px;font-size:16px;color:#145c30;display:flex;align-items:center;gap:6px}
+.guide-item{margin:8px 0;font-size:14px;line-height:1.55;color:#233329}
+.guide-badge{display:inline-block;padding:2px 7px;border-radius:6px;font-size:12px;font-weight:700;margin-right:6px}
+.badge-how{background:#167a3d;color:#fff}
+.badge-tip{background:#e5a93b;color:#2b1f04}
+.feedback{display:none;margin-top:16px;padding-top:15px;border-top:1px solid #e7ece7}
+select{padding:11px;border:1px solid #ccd8ce;border-radius:10px;background:white;max-width:100%;font-size:14px}
+.note{background:#fff8e6;border:1px solid #f0dfaa;border-radius:12px;padding:12px;color:#6e5721;font-size:13px;line-height:1.55}
+.smallbtn{padding:9px 12px;font-size:13px}.history{font-size:13px;color:#516056;max-height:180px;overflow:auto}
+footer{font-size:12px;color:#77847b;line-height:1.6;margin-top:20px}
+@media(max-width:540px){body{padding:18px 12px}.card{padding:15px}.actions button,.actions label{flex:1;text-align:center}}
+</style>
+</head>
+<body><main class="wrap">
+<header>
+ <span class="tag">AI 이미지 분석 · 배출 가이드 · 피드백 수집</span>
+ <h1>♻️ 스마트 쓰레기 분류기</h1>
+ <p>쓰레기 사진을 촬영하거나 업로드하면 AI가 종류를 예측하고, 올바른 분리배출 방법과 팁을 안내해 드려요.</p>
+</header>
+
+<section class="card">
+ <h2>1. 이미지 입력</h2>
+ <div class="actions">
+  <label class="filebtn" for="file">📁 이미지 업로드</label>
+  <button class="secondary" id="cameraBtn">📷 카메라 켜기</button>
+  <button class="secondary" id="captureBtn" disabled>사진 촬영</button>
+  <button class="danger" id="stopBtn" disabled>카메라 끄기</button>
+ </div>
+ <input id="file" type="file" accept="image/*">
+ <video id="video" autoplay playsinline></video>
+ <canvas id="canvas" hidden></canvas>
+ <img id="preview" class="preview" alt="분석할 쓰레기 이미지 미리보기">
+ <div class="status" id="status" role="status">이미지를 선택하거나 카메라를 켜세요.</div>
+ <div class="actions"><button class="primary" id="analyzeBtn" disabled>AI로 쓰레기 분류하기</button></div>
+</section>
+
+<section class="card result" id="result">
+ <h2>2. AI 분석 결과 및 배출 가이드</h2>
+ <div class="muted">가장 가능성이 높다고 판단한 종류</div>
+ <div class="big" id="topLabel">-</div>
+ <div class="muted" id="topScore"></div>
+
+ <div class="guide-box" id="guideBox">
+  <h3 id="guideTitle">♻️ 분리배출 안내</h3>
+  <div class="guide-item"><span class="guide-badge badge-how">배출 방법</span><span id="guideHow"></span></div>
+  <div class="guide-item"><span class="guide-badge badge-tip">핵심 팁</span><span id="guideTip"></span></div>
+ </div>
+
+ <div id="scores" class="grid" style="margin-top:16px"></div>
+ <div class="feedback" id="feedback">
+  <h3>3. 결과가 맞나요?</h3>
+  <p>틀렸다면 실제 종류를 선택해 주세요. 선택 시 해당 항목의 배출 가이드로 바로 변경되며, 수정 내용은 브라우저에 저장됩니다.</p>
+  <div class="actions">
+   <select id="correctLabel" aria-label="올바른 쓰레기 종류 선택"></select>
+   <button class="primary" id="saveFeedback">수정 결과 저장</button>
+  </div>
+  <div class="status" id="feedbackStatus"></div>
+ </div>
+</section>
+
+<section class="card">
+ <h2>저장된 피드백</h2>
+ <p>사용자 수정 기록을 CSV로 내려받아 전용 AI 모델을 추가 학습시키는 데이터로 활용할 수 있습니다.</p>
+ <div class="actions">
+  <button class="secondary smallbtn" id="exportBtn">피드백 CSV 내보내기</button>
+  <button class="danger smallbtn" id="clearBtn">기록 삭제</button>
+ </div>
+ <div class="history" id="history">아직 저장된 피드백이 없습니다.</div>
+</section>
+
+<div class="note"><b>정확도 안내</b><br>
+이 버전은 범용 이미지-텍스트 AI(CLIP)를 이용해 쓰레기 종류를 추정합니다. 쓰레기 전용 사진으로 학습한 모델은 아니므로 오분류가 생길 수 있습니다. 특히 내용물이 남은 용기, 여러 쓰레기가 함께 나온 사진, 재질이 비슷한 물체는 결과를 꼭 확인하세요. 화면의 점수는 후보 간 유사도이며 실제 정답 확률을 보장하지 않습니다.</div>
+<footer>처음 실행할 때 AI 모델 파일(수백 MB 수준)이 브라우저에 다운로드될 수 있습니다. 인터넷 연결이 필요합니다. 카메라는 HTTPS 또는 localhost에서만 정상 작동합니다. 이미지 자체는 서버로 업로드하지 않고 브라우저에서 분석합니다. 피드백은 현재 브라우저의 저장 공간에 기록됩니다.</footer>
+</main>
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2';
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+
+const categories = [
+ {
+  ko:'플라스틱',
+  en:'a photo of plastic waste, such as a PET bottle, plastic container or plastic packaging',
+  how:'내용물을 깨끗이 비우고 물로 헹군 뒤, 부착된 라벨·뚜껑 등 다른 재질을 제거하여 플라스틱 수거함에 배출합니다.',
+  tip:'투명 생수·음료 페트병은 라벨을 떼고 찌그러뜨려 뚜껑을 닫은 뒤 별도 투명 페트병 전용함에 넣으세요. 칫솔·문구류·장난감 등 복합 재질은 일반 쓰레기입니다.'
+ },
+ {
+  ko:'종이·종이팩',
+  en:'a photo of paper waste, cardboard, newspaper or a paper carton',
+  how:'물기에 젖지 않게 펼치거나 차곡차곡 묶어서 배출합니다. 우유팩·두유팩 등 종이팩은 내용물을 헹군 뒤 말려서 일반 종이와 구분해 배출합니다.',
+  tip:'택배 상자는 테이프와 운송장 스티커를 꼭 제거하세요. 영수증(감열지), 코팅된 전단지, 기름 묻은 피자 박스, 사용한 휴지는 일반 쓰레기로 버려야 합니다.'
+ },
+ {
+  ko:'캔·금속',
+  en:'a photo of metal waste, such as an aluminum drink can or steel can',
+  how:'내용물을 비우고 물로 헹군 뒤 가능한 찌그러뜨려 캔류 수거함에 배출합니다. 부탄가스·스프레이 용기는 환기가 잘되는 야외에서 구멍을 뚫어 가스를 완전히 비운 뒤 배출합니다.',
+  tip:'참치캔·통조림의 기름기는 키친타월로 닦거나 세제로 가볍게 씻어 배출하세요. 알루미늄 호일은 재활용이 어려우니 일반 쓰레기로 버립니다.'
+ },
+ {
+  ko:'유리',
+  en:'a photo of glass waste, such as a glass bottle or glass jar',
+  how:'병뚜껑을 제거하고 내용물을 비워 물로 헹군 뒤 깨지지 않게 유리병 수거함에 넣습니다.',
+  tip:'소주병·맥주병 등 빈용기보증금 대상 병은 마트·편의점에 반납하면 보증금을 돌려받을 수 있어요. 깨진 유리, 거울, 도자기, 내열유리 냄비 뚜껑은 일반 쓰레기(불연성 마대)입니다.'
+ },
+ {
+  ko:'음식물 쓰레기',
+  en:'a photo of food scraps, leftover food, fruit peels or vegetable waste',
+  how:'물기와 이물질(이쑤시개, 비닐 등)을 최대한 제거한 뒤 전용 수거함이나 음식물 종량제 봉투에 담아 배출합니다.',
+  tip:'"동물이 먹을 수 있는가"로 구분하면 쉬워요! 닭·돼지 뼈, 조개·게 껍데기, 달걀 껍데기, 호두·밤 껍질, 양파·마늘 껍질, 차 찌꺼기는 일반 쓰레기입니다.'
+ },
+ {
+  ko:'일반 쓰레기',
+  en:'a photo of non-recyclable household waste or mixed general rubbish',
+  how:'재활용이 불가능한 품목이므로 지자체 규격 종량제 봉투에 담아 지정된 장소에 배출합니다.',
+  tip:'오염이 심해 씻어도 이물질이 지워지지 않는 용기, 기저귀, 고무장갑, 슬리퍼, 볼펜 등은 재활용함에 섞이면 전체 재활용품을 오염시키니 꼭 종량제 봉투에 넣어주세요.'
+ },
+ {
+  ko:'비닐·필름',
+  en:'a photo of plastic film waste, a shopping bag, wrapper or plastic packaging film',
+  how:'과자 봉지, 라면 봉지, 일회용 비닐봉투 등은 내용물을 비우고 이물질이 묻어 있다면 물로 헹군 뒤 투명·반투명 봉투에 모아 배출합니다.',
+  tip:'재활용 마크가 없더라도 깨끗한 비닐류는 대부분 분리배출 대상입니다. 단, 음식물이나 기름이 심하게 묻어 씻기지 않는 랩·비닐은 일반 쓰레기로 버리세요.'
+ },
+ {
+  ko:'스티로폼',
+  en:'a photo of expanded polystyrene foam packaging waste',
+  how:'상자에 붙은 택배 송장, 테이프, 상표 스티커를 완전히 제거하고 이물질이 묻지 않은 흰색 스티로폼만 배출합니다.',
+  tip:'컵라면 용기처럼 음식물 국물이 배어 붉게 물든 스티로폼은 재활용이 불가하므로 일반 쓰레기로 버려야 합니다. 색상이 있거나 코팅된 건축용 단열재도 일반 쓰레기입니다.'
+ },
+ {
+  ko:'섬유·의류',
+  en:'a photo of textile waste, old clothes or fabric',
+  how:'깨끗한 헌 옷, 신발, 가방, 커튼 등은 물에 젖지 않게 잘 개어 헌옷 수거함에 배출합니다.',
+  tip:'솜이불, 베개, 방석, 전기장판, 바퀴 달린 여행가방, 심하게 찢어지거나 오염된 옷은 헌옷 수거함 대상이 아니므로 일반 쓰레기 또는 대형폐기물로 신고해 배출하세요.'
+ },
+ {
+  ko:'전자제품·전선',
+  en:'a photo of electronic waste, a small electronic device, cable or wire',
+  how:'스마트폰, 충전기, 드라이기 등 소형 폐가전은 주민센터·아파트 내 소형폐가전 전용 수거함이나 지자체 수거 서비스를 통해 무상 배출합니다.',
+  tip:'냉장고·세탁기 등 대형 가전은 "폐가전 무상방문수거" 서비스를 예약하면 무료로 수거해 갑니다. 폐건전지와 형광등은 반드시 전용 수거함에 분리해 버리세요.'
+ }
+];
+
+const $ = id => document.getElementById(id);
+let classifier = null, stream = null, currentFile = null, lastResults = null;
+const fileInput=$('file'), preview=$('preview'), video=$('video'), analyzeBtn=$('analyzeBtn');
+categories.forEach(c=>$('correctLabel').add(new Option(c.ko,c.ko)));
+
+function setStatus(t){$('status').textContent=t}
+function showImage(blob){
+ currentFile=blob; preview.src=URL.createObjectURL(blob); preview.style.display='block';
+ video.style.display='none'; analyzeBtn.disabled=false; $('result').style.display='none';
+}
+fileInput.addEventListener('change',e=>{const f=e.target.files?.[0];if(f){if(!f.type.startsWith('image/'))return setStatus('이미지 파일을 선택해 주세요.');showImage(f);setStatus('이미지가 준비됐어요. AI 분류를 시작하세요.')}});
+$('cameraBtn').onclick=async()=>{
+ try{
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+  video.srcObject=stream;video.style.display='block';preview.style.display='none';
+  $('captureBtn').disabled=false;$('stopBtn').disabled=false;setStatus('카메라가 켜졌어요. 쓰레기를 화면에 맞추고 촬영하세요.');
+ }catch(e){setStatus('카메라를 열 수 없습니다. 브라우저 권한과 HTTPS 연결을 확인하세요.')}
+};
+$('captureBtn').onclick=()=>{
+ if(!stream)return;const track=stream.getVideoTracks()[0];const s=track.getSettings();
+ const canvas=$('canvas');canvas.width=s.width||video.videoWidth;canvas.height=s.height||video.videoHeight;
+ canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+ canvas.toBlob(b=>{if(b){showImage(b);setStatus('촬영 완료! AI 분류를 시작하세요.')}},'image/jpeg',.92);
+};
+$('stopBtn').onclick=stopCamera;
+function stopCamera(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}video.srcObject=null;video.style.display='none';$('captureBtn').disabled=true;$('stopBtn').disabled=true}
+async function getClassifier(){
+ if(classifier)return classifier;
+ setStatus('AI 모델을 불러오는 중입니다. 첫 실행은 다운로드 때문에 시간이 걸릴 수 있어요…');
+ classifier=await pipeline('zero-shot-image-classification','Xenova/clip-vit-base-patch32',{dtype:'q8'});
+ return classifier;
+}
+function renderGuide(labelKo){
+ const cat = categories.find(c => c.ko === labelKo);
+ if(!cat) return;
+ $('guideTitle').textContent = `♻️ [${cat.ko}] 올바른 분리배출 안내`;
+ $('guideHow').textContent = cat.how;
+ $('guideTip').textContent = cat.tip;
+}
+analyzeBtn.onclick=async()=>{
+ if(!currentFile)return;
+ analyzeBtn.disabled=true;
+ try{
+  const model=await getClassifier();
+  setStatus('이미지의 재질과 형태를 분석하고 있어요…');
+  const url=URL.createObjectURL(currentFile);
+  const labels=categories.map(c=>c.en);
+  const output=await model(url,labels);
+  URL.revokeObjectURL(url);
+  lastResults=output.map(x=>({label:categories.find(c=>c.en===x.label)?.ko||x.label,score:x.score})).sort((a,b)=>b.score-a.score);
+  renderResults();$('result').style.display='block';$('feedback').style.display='block';
+  $('correctLabel').value=lastResults[0].label;
+  renderGuide(lastResults[0].label);
+  setStatus('분석이 완료됐어요. 결과와 배출 방법을 확인해 주세요.');
+ }catch(e){console.error(e);setStatus('분석에 실패했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.')}
+ finally{analyzeBtn.disabled=false}
+};
+function renderResults(){
+ $('topLabel').textContent=lastResults[0].label;
+ $('topScore').textContent=`후보 유사도 ${(lastResults[0].score*100).toFixed(1)}% · 확정 판정이 아닌 참고값`;
+ $('scores').innerHTML=lastResults.slice(0,6).map(x=>`<div class="score"><div class="scorehead"><b>${x.label}</b><span>${(x.score*100).toFixed(1)}%</span></div><div class="bar"><span style="width:${Math.max(0,Math.min(100,x.score*100))}%"></span></div></div>`).join('');
+}
+$('correctLabel').addEventListener('change', e => {
+ renderGuide(e.target.value);
+});
+function readFeedback(){try{return JSON.parse(localStorage.getItem('wasteFeedback')||'[]')}catch{return []}}
+function drawHistory(){
+ const arr=readFeedback();$('history').textContent=arr.length?`총 ${arr.length}건 저장됨 · 최근 기록: `+arr.slice(-5).reverse().map(x=>`${x.predicted} → ${x.correct}`).join(' / '):'아직 저장된 피드백이 없습니다.';
+}
+$('saveFeedback').onclick=()=>{
+ if(!lastResults)return;
+ const item={date:new Date().toISOString(),predicted:lastResults[0].label,correct:$('correctLabel').value,topScores:lastResults.slice(0,3).map(x=>`${x.label}:${x.score.toFixed(4)}`).join('|')};
+ const arr=readFeedback();arr.push(item);localStorage.setItem('wasteFeedback',JSON.stringify(arr));
+ $('feedbackStatus').textContent=item.predicted===item.correct?'확인 완료! 피드백을 저장했어요.':'수정 완료! 정답 피드백을 저장했어요.';
+ drawHistory();
+};
+$('exportBtn').onclick=()=>{
+ const arr=readFeedback();if(!arr.length){$('feedbackStatus').textContent='내보낼 피드백이 없습니다.';return}
+ const rows=[['date','predicted','correct','topScores'],...arr.map(x=>[x.date,x.predicted,x.correct,x.topScores])];
+ const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='waste-feedback.csv';a.click();URL.revokeObjectURL(a.href);
+};
+$('clearBtn').onclick=()=>{if(confirm('저장된 피드백을 모두 삭제할까요?')){localStorage.removeItem('wasteFeedback');drawHistory()}};
+drawHistory();
+</script>
+</body></html>
